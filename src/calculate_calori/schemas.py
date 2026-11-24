@@ -1,11 +1,7 @@
-import ast
-import json
-import re
-
 from pydantic import BaseModel, Field, ValidationError
 
 
-class KaloriAraligi(BaseModel):
+class CalorieRange(BaseModel):
     min: float
     max: float
 
@@ -15,69 +11,53 @@ class KaloriAraligi(BaseModel):
         return f"{self.min:g}–{self.max:g} kcal"
 
 
-class Oge(BaseModel):
-    ad: str
-    porsiyon: str = "-"
-    kalori_kcal: KaloriAraligi
+class FoodItem(BaseModel):
+    name: str
+    portion: str = "-"
+    calories_kcal: CalorieRange
     protein_g: float = 0
-    karbonhidrat_g: float = 0
-    yag_g: float = 0
-    guven: str = "-"
+    carbs_g: float = 0
+    fat_g: float = 0
+    confidence: str = "-"
 
 
-class Toplam(BaseModel):
-    kalori_kcal: KaloriAraligi
+class Totals(BaseModel):
+    calories_kcal: CalorieRange
     protein_g: float = 0
-    karbonhidrat_g: float = 0
-    yag_g: float = 0
+    carbs_g: float = 0
+    fat_g: float = 0
 
 
-class AnalizSonucu(BaseModel):
-    ogeler: list[Oge] = Field(default_factory=list)
-    toplam: Toplam
-    varsayimlar: list[str] = Field(default_factory=list)
-    netlestirme_sorusu: str | None = None
+class AnalysisResult(BaseModel):
+    items: list[FoodItem] = Field(default_factory=list)
+    total: Totals
+    assumptions: list[str] = Field(default_factory=list)
+    clarifying_question: str | None = None
 
     def to_markdown(self) -> str:
-        t = self.toplam
+        t = self.total
         lines = [
-            f"## 🔥 Toplam: {t.kalori_kcal}",
-            f"**Protein:** {t.protein_g:g} g · **Karbonhidrat:** {t.karbonhidrat_g:g} g · **Yağ:** {t.yag_g:g} g",
+            f"## 🔥 Toplam: {t.calories_kcal}",
+            f"**Protein:** {t.protein_g:g} g · **Karbonhidrat:** {t.carbs_g:g} g · **Yağ:** {t.fat_g:g} g",
         ]
-        if self.ogeler:
+        if self.items:
             lines += [
                 "",
                 "### Öğeler",
                 "| Yiyecek | Porsiyon | Kalori | Protein | Karb. | Yağ | Güven |",
                 "|---|---|---|---|---|---|---|",
             ]
-            for o in self.ogeler:
+            for item in self.items:
                 lines.append(
-                    f"| {o.ad} | {o.porsiyon} | {o.kalori_kcal} | {o.protein_g:g} g "
-                    f"| {o.karbonhidrat_g:g} g | {o.yag_g:g} g | {o.guven} |"
+                    f"| {item.name} | {item.portion} | {item.calories_kcal} | {item.protein_g:g} g "
+                    f"| {item.carbs_g:g} g | {item.fat_g:g} g | {item.confidence} |"
                 )
-        if self.varsayimlar:
-            lines += ["", "### Varsayımlar", *[f"- {v}" for v in self.varsayimlar]]
-        if self.netlestirme_sorusu:
-            lines += ["", f"> ❓ {self.netlestirme_sorusu}"]
+        if self.assumptions:
+            lines += ["", "### Varsayımlar", *[f"- {a}" for a in self.assumptions]]
+        if self.clarifying_question:
+            lines += ["", f"> ❓ {self.clarifying_question}"]
         lines += ["", "*Değerler tahminidir; tıbbi tavsiye değildir.*"]
         return "\n".join(lines)
 
 
-def parse_sonuc(text: str) -> AnalizSonucu | None:
 
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
-        return None
-    raw = match.group(0)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        try:
-            data = ast.literal_eval(raw)
-        except (ValueError, SyntaxError):
-            return None
-    try:
-        return AnalizSonucu.model_validate(data)
-    except ValidationError:
-        return None

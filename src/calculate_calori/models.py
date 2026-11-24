@@ -1,6 +1,6 @@
 from openai import OpenAI
 from calculate_calori.prompts import sys_prompts
-from calculate_calori.schemas import parse_sonuc
+from calculate_calori.schemas import AnalysisResult
 import base64
 import mimetypes
 import os
@@ -11,9 +11,6 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1",
     api_key=os.getenv("GROQ_API_KEY", ""),
 )
-
-
-input_text = "Bu fotoğraftaki yemeğin kalorisini hesapla."
 
 def generate_image(image_path, description=""):
     if not image_path:
@@ -27,26 +24,29 @@ def generate_image(image_path, description=""):
         return "API hatası: .env dosyasında GROQ_API_KEY bulunamadı."
 
     try:
-        response = client.responses.create(
+        response = client.responses.parse(
             model="qwen/qwen3.8-27b",
             instructions=sys_prompts,
             input=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "input_text", "text": description or input_text},
+                        {"type": "input_text", "text": description or "Bu fotoğraftaki yemeğin kalorisini hesapla."},
                         {"type": "input_image", "image_url": data_url},
                     ],
                 }
             ],
+            text_format=AnalysisResult,
         )
     except Exception as e:
         return f"API hatası: {e}"
 
     if response.status == "failed":
         return f"API hatası: {response.error.message if response.error else 'bilinmeyen hata'}"
+    res = response.output_parsed
+    if res is not None:
+        return res.to_markdown()
     text = response.output_text
     if not text:
         return "Model boş yanıt döndürdü."
-    sonuc = parse_sonuc(text)
-    return sonuc.to_markdown() if sonuc else text
+    return text
