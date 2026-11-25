@@ -23,6 +23,7 @@ def generate_image(image_path, description=""):
     if not os.getenv("GROQ_API_KEY"):
         return "API hatası: .env dosyasında GROQ_API_KEY bulunamadı."
 
+    latest_response_id = None
     try:
         response = client.responses.parse(
             model="qwen/qwen3.8-27b",
@@ -36,6 +37,7 @@ def generate_image(image_path, description=""):
                     ],
                 }
             ],
+            previous_response_id=latest_response_id,
             text_format=AnalysisResult,
         )
     except Exception as e:
@@ -49,4 +51,6 @@ def generate_image(image_path, description=""):
     text = response.output_text
     if not text:
         return "Model boş yanıt döndürdü."
+
+    latest_response_id = response.id
     return text
